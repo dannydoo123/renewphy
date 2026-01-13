@@ -210,23 +210,3 @@ MIT License
 3. Commit changes (`git commit -m 'Add AmazingFeature'`)
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
-
----
-
-## 스크린샷 및 데모
-
-### 메인 대시보드
-![Dashboard Screenshot](docs/screenshots/dashboard.png)
-
-### 캘린더 일정 관리
-![Calendar Screenshot](docs/screenshots/calendar.png)
-
-### 자재 관리 대시보드
-![Materials Screenshot](docs/screenshots/materials.png)
-
-### 엑셀 업로드 마법사
-![Upload Screenshot](docs/screenshots/upload-wizard.png)
-
----
-
-**🚀 프로덕션 레디 풀스택 생산관리 시스템 - 실시간 모니터링부터 AI 기반 최적화까지!**
