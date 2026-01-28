@@ -1,0 +1,388 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  productionRequests ProductionRequest[]
+  scheduleChanges    ScheduleChange[]
+  requestedApprovals Approval[] @relation("ApprovalRequester")
+  approvalsGiven     Approval[] @relation("ApprovalApprover")
+  notifications      Notification[]
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  PLANNER
+  MATERIAL
+  USER
+}
+
+model Company {
+  id          String      @id @default(cuid())
+  name        String
+  code        String      @unique
+  rank        CompanyRank @default(B)
+  priority    Int         @default(1)
+  contactInfo Json?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  productionRequests ProductionRequest[]
+
+  @@map("companies")
+}
+
+enum CompanyRank {
+  S
+  A
+  B
+  C
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  description String?
+  unitPrice   Decimal?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  boms               BOM[]
+  productionRequests ProductionRequest[]
+
+  @@map("products")
+}
+
+model Material {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  unit        String
+  unitCost    Decimal?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  inventory Inventory?
+  boms      BOM[]
+
+  @@map("materials")
+}
+
+model Inventory {
+  id             String    @id @default(cuid())
+  materialId     String    @unique
+  onHand         Int       @default(0)
+  onOrder        Int       @default(0)
+  leadTimeDays   Int       @default(7)
+  nextInboundDate DateTime?
+  safetyStock    Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  material Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@map("inventory")
+}
+
+model BOM {
+  id         String   @id @default(cuid())
+  productId  String
+  materialId String
+  quantity   Decimal
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  material Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, materialId])
+  @@map("bom")
+}
+
+model ProductionRequest {
+  id             String            @id @default(cuid())
+  requestNumber  String            @unique
+  companyId      String
+  productId      String
+  requestedQty   Int
+  availableNow   Int               @default(0)
+  dueDate        DateTime
+  priority       Priority          @default(MEDIUM)
+  status         RequestStatus     @default(PENDING)
+  notes          String?
+  createdBy      String
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  company   Company            @relation(fields: [companyId], references: [id])
+  product   Product            @relation(fields: [productId], references: [id])
+  user      User               @relation(fields: [createdBy], references: [id])
+  schedules ProductionSchedule[]
+
+  @@map("production_requests")
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model ProductionSchedule {
+  id                    String                 @id @default(cuid())
+  requestId             String
+  scheduledDate         DateTime
+  plannedQty            Int
+  actualQty             Int?
+  effectiveCapacityQty  Int
+  overtimeMinutes       Int                    @default(0)
+  workStage             WorkStage              @default(MIXING)
+  status                ScheduleStatus         @default(PLANNED)
+  notes                 String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  request         ProductionRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  changes         ScheduleChange[]
+  shiftCapacities ShiftCapacity[]
+
+  @@map("production_schedules")
+}
+
+enum WorkStage {
+  MIXING
+  PACKAGING
+  QA
+  SHIPPING
+}
+
+enum ScheduleStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  DELAYED
+  CANCELLED
+}
+
+model ScheduleChange {
+  id         String   @id @default(cuid())
+  scheduleId String
+  userId     String
+  field      String
+  oldValue   String?
+  newValue   String?
+  reason     String?
+  timestamp  DateTime @default(now())
+
+  schedule ProductionSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  user     User               @relation(fields: [userId], references: [id])
+
+  @@map("schedule_changes")
+}
+
+model ShiftModel {
+  id                String   @id @default(cuid())
+  name              String
+  shiftsPerDay      Int
+  minutesPerShift   Int
+  cleanupMinutes    Int      @default(60)
+  changeoverMinutes Int      @default(30)
+  speedPerMinute    Int
+  defectRate        Decimal  @default(0.05)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  shiftCapacities ShiftCapacity[]
+
+  @@map("shift_models")
+}
+
+model ShiftCapacity {
+  id                   String   @id @default(cuid())
+  scheduleId           String
+  shiftModelId         String
+  effectiveCapacityQty Int
+  calculatedAt         DateTime @default(now())
+
+  schedule   ProductionSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  shiftModel ShiftModel         @relation(fields: [shiftModelId], references: [id])
+
+  @@unique([scheduleId, shiftModelId])
+  @@map("shift_capacities")
+}
+
+model Approval {
+  id               String        @id @default(cuid())
+  type             ApprovalType
+  referenceId      String
+  requesterId      String
+  approverId       String?
+  status           ApprovalStatus @default(PENDING)
+  overtimeMinutes  Int?
+  reason           String?
+  approvedAt       DateTime?
+  douofficeTaskId  String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  requester User  @relation("ApprovalRequester", fields: [requesterId], references: [id])
+  approver  User? @relation("ApprovalApprover", fields: [approverId], references: [id])
+
+  @@map("approvals")
+}
+
+enum ApprovalType {
+  OVERTIME
+  SCHEDULE_CHANGE
+  CAPACITY_OVERRIDE
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  data      Json?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+enum NotificationType {
+  SCHEDULE_UPDATE
+  APPROVAL_REQUEST
+  APPROVAL_RESULT
+  MATERIAL_SHORTAGE
+  CAPACITY_WARNING
+  SYSTEM_ALERT
+}
+
+model FileImport {
+  id           String           @id @default(cuid())
+  filename     String
+  originalName String
+  size         Int
+  mimetype     String
+  status       FileImportStatus @default(PENDING)
+  isMainFile   Boolean          @default(false)
+  mapping      Json?
+  errorLog     Json?
+  processedAt  DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@map("file_imports")
+}
+
+enum FileImportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  ERROR
+}
+
+model OrderPlan {
+  id              Int              @id @default(autoincrement())
+  orderNumber     String           @unique
+  companyName     String
+  productName     String
+  orderQuantity   Int
+  weight          Int?
+  workType        WorkType         @default(MIXING)
+  status          OrderPlanStatus  @default(PLANNED)
+  desiredDate     DateTime
+  deliveryDate    DateTime
+  details         String?
+  repeatProgress  Int              @default(0)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@map("order_plans")
+}
+
+enum WorkType {
+  OVEN
+  MIXING
+  PACKAGING
+  SORTING
+}
+
+enum OrderPlanStatus {
+  PLANNED
+  IN_PRODUCTION
+  PRODUCTION_COMPLETED
+  INSPECTION
+  SHIPPING
+  DELIVERY_COMPLETED
+}
+
+model ActivityLog {
+  id          Int             @id @default(autoincrement())
+  type        ActivityType
+  title       String
+  description String
+  data        Json?
+  createdAt   DateTime        @default(now())
+
+  @@map("activity_logs")
+}
+
+enum ActivityType {
+  ORDER_PLAN_CREATED
+  ORDER_PLAN_UPDATED
+  ORDER_PLAN_STATUS_CHANGED
+  PURCHASE_ORDER_UPDATED
+  MATERIAL_UPDATED
+  SYSTEM_EVENT
+}
+
+model ProductCache {
+  id            Int      @id @default(autoincrement())
+  productCode   String   @unique
+  productName   String
+  syncedAt      DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([productName])
+  @@index([productCode])
+  @@map("product_cache")
+}

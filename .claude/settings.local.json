@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npm run dev:*)",
+      "Bash(npx prisma generate:*)",
+      "Bash(py --version)",
+      "Bash(npm install:*)",
+      "Bash(npx prisma migrate:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

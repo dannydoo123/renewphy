@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 데이터베이스
+  postgres:
+    image: postgres:15-alpine
+    container_name: production-scheduler-db
+    environment:
+      POSTGRES_USER: scheduler
+      POSTGRES_PASSWORD: scheduler123
+      POSTGRES_DB: production_scheduler
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - scheduler-network
+
+  # Redis (캐싱 및 세션 관리용)
+  redis:
+    image: redis:7-alpine
+    container_name: production-scheduler-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - scheduler-network
+
+  # 메인 애플리케이션
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: production-scheduler-app
+    environment:
+      DATABASE_URL: "postgresql://scheduler:scheduler123@postgres:5432/production_scheduler?schema=public"
+      JWT_SECRET: "your-production-jwt-secret-key-here"
+      NODE_ENV: "production"
+      PORT: 3001
+      CORS_ORIGIN: "http://localhost:3000"
+      SOCKET_CORS_ORIGIN: "http://localhost:3000"
+      # SMTP Settings (프로덕션에서 설정)
+      SMTP_HOST: "smtp.gmail.com"
+      SMTP_PORT: 587
+      SMTP_USER: "your-email@gmail.com" 
+      SMTP_PASSWORD: "your-app-password"
+      SMTP_FROM: "Production Scheduler <noreply@yourcompany.com>"
+      # Webhook URLs (프로덕션에서 설정)
+      KAKAOWORK_WEBHOOK_URL: "https://hooks.kakaowork.com/services/your-webhook-url"
+      SLACK_WEBHOOK_URL: "https://hooks.slack.com/services/your-webhook-url"
+      # DouOffice API (프로덕션에서 설정)
+      DOUOFFICE_API_BASE: "https://api.douoffice.com"
+      DOUOFFICE_API_KEY: "your-douoffice-api-key"
+      DOUOFFICE_CLIENT_ID: "your-douoffice-client-id"
+      DOUOFFICE_CLIENT_SECRET: "your-douoffice-client-secret"
+    ports:
+      - "3001:3001"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - scheduler-network
+    volumes:
+      - uploads_data:/app/uploads
+    restart: unless-stopped
+
+  # Nginx (리버스 프록시 및 정적 파일 서빙)
+  nginx:
+    image: nginx:alpine
+    container_name: production-scheduler-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./apps/client/dist:/usr/share/nginx/html
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - app
+    networks:
+      - scheduler-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  uploads_data:
+
+networks:
+  scheduler-network:
+    driver: bridge
